@@ -46,9 +46,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		D0ECFF3B30788AD9008C9334 /* FingerTracker */ = {
+		D0ECFF3B30788AD9008C9334 /* gesture_lens */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = D0ECFF4730788AD9008C9334 /* Build configuration list for PBXNativeTarget "FingerTracker" */;
+			buildConfigurationList = D0ECFF4730788AD9008C9334 /* Build configuration list for PBXNativeTarget "gesture_lens" */;
 			buildPhases = (
 				D0ECFF3830788AD9008C9334 /* Sources */,
 				D0ECFF3930788AD9008C9334 /* Frameworks */,
@@ -59,7 +59,7 @@
 			fileSystemSynchronizedGroups = (
 				D0ECFF3E30788AD9008C9334 /* gesture_lens */,
 			);
-			name = FingerTracker;
+			name = gesture_lens;
 			productName = FingerTracker;
 			productReference = D0ECFF3C30788AD9008C9334 /* gesture_lens.app */;
 			productType = "com.apple.product-type.application";
@@ -79,7 +79,7 @@
 					};
 				};
 			};
-			buildConfigurationList = D0ECFF3730788AD9008C9334 /* Build configuration list for PBXProject "FingerTracker" */;
+			buildConfigurationList = D0ECFF3730788AD9008C9334 /* Build configuration list for PBXProject "gesture_lens" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -93,7 +93,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				D0ECFF3B30788AD9008C9334 /* FingerTracker */,
+				D0ECFF3B30788AD9008C9334 /* gesture_lens */,
 			);
 		};
 /* End PBXProject section */
@@ -115,7 +115,7 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		D0ECFF4530788AD9008C9334 /* Debug configuration for PBXProject "FingerTracker" */ = {
+		D0ECFF4530788AD9008C9334 /* Debug configuration for PBXProject "gesture_lens" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -178,7 +178,7 @@
 			};
 			name = Debug;
 		};
-		D0ECFF4630788AD9008C9334 /* Release configuration for PBXProject "FingerTracker" */ = {
+		D0ECFF4630788AD9008C9334 /* Release configuration for PBXProject "gesture_lens" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -233,7 +233,7 @@
 			};
 			name = Release;
 		};
-		D0ECFF4830788AD9008C9334 /* Debug configuration for PBXNativeTarget "FingerTracker" */ = {
+		D0ECFF4830788AD9008C9334 /* Debug configuration for PBXNativeTarget "gesture_lens" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -266,7 +266,7 @@
 			};
 			name = Debug;
 		};
-		D0ECFF4930788AD9008C9334 /* Release configuration for PBXNativeTarget "FingerTracker" */ = {
+		D0ECFF4930788AD9008C9334 /* Release configuration for PBXNativeTarget "gesture_lens" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -302,19 +302,19 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		D0ECFF3730788AD9008C9334 /* Build configuration list for PBXProject "FingerTracker" */ = {
+		D0ECFF3730788AD9008C9334 /* Build configuration list for PBXProject "gesture_lens" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				D0ECFF4530788AD9008C9334 /* Debug configuration for PBXProject "FingerTracker" */,
-				D0ECFF4630788AD9008C9334 /* Release configuration for PBXProject "FingerTracker" */,
+				D0ECFF4530788AD9008C9334 /* Debug configuration for PBXProject "gesture_lens" */,
+				D0ECFF4630788AD9008C9334 /* Release configuration for PBXProject "gesture_lens" */,
 			);
 			defaultConfigurationName = Release;
 		};
-		D0ECFF4730788AD9008C9334 /* Build configuration list for PBXNativeTarget "FingerTracker" */ = {
+		D0ECFF4730788AD9008C9334 /* Build configuration list for PBXNativeTarget "gesture_lens" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				D0ECFF4830788AD9008C9334 /* Debug configuration for PBXNativeTarget "FingerTracker" */,
-				D0ECFF4930788AD9008C9334 /* Release configuration for PBXNativeTarget "FingerTracker" */,
+				D0ECFF4830788AD9008C9334 /* Debug configuration for PBXNativeTarget "gesture_lens" */,
+				D0ECFF4930788AD9008C9334 /* Release configuration for PBXNativeTarget "gesture_lens" */,
 			);
 			defaultConfigurationName = Release;
 		};
