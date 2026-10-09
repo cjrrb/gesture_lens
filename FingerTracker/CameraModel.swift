@@ -21,6 +21,15 @@ struct TrackedHand: Identifiable {
     /// Normalized positions of every confidently detected joint, keyed by joint name (e.g. "indexPIP").
     let joints: [String: CGPoint]
 
+    /// Joint chains from the wrist out to each fingertip, used to draw the skeleton.
+    static let skeleton: [[String]] = [
+        ["wrist", "thumbCMC", "thumbMP", "thumbIP", "thumbTip"],
+        ["wrist", "indexMCP", "indexPIP", "indexDIP", "indexTip"],
+        ["wrist", "middleMCP", "middlePIP", "middleDIP", "middleTip"],
+        ["wrist", "ringMCP", "ringPIP", "ringDIP", "ringTip"],
+        ["wrist", "littleMCP", "littlePIP", "littleDIP", "littleTip"]
+    ]
+
     private static let tips: [(joint: String, name: String)] = [
         ("thumbTip", "Thumb"), ("indexTip", "Index"), ("middleTip", "Middle"), ("ringTip", "Ring"), ("littleTip", "Little")
     ]
@@ -160,10 +169,14 @@ nonisolated final class FrameProcessor: NSObject, AVCaptureVideoDataOutputSample
     private let faceRequest = VNDetectFaceRectanglesRequest()
     private let onResults: @Sendable ([TrackedHand], [TrackedFace], CGSize) -> Void
 
-    /// The fingertip joints Vision reports, with the names used in `TrackedHand.joints`.
+    /// Every hand joint Vision reports, with the names used in `TrackedHand.joints`.
     private static let jointNames: [(VNHumanHandPoseObservation.JointName, String)] = [
-        (.thumbTip, "thumbTip"), (.indexTip, "indexTip"), (.middleTip, "middleTip"),
-        (.ringTip, "ringTip"), (.littleTip, "littleTip")
+        (.wrist, "wrist"),
+        (.thumbCMC, "thumbCMC"), (.thumbMP, "thumbMP"), (.thumbIP, "thumbIP"), (.thumbTip, "thumbTip"),
+        (.indexMCP, "indexMCP"), (.indexPIP, "indexPIP"), (.indexDIP, "indexDIP"), (.indexTip, "indexTip"),
+        (.middleMCP, "middleMCP"), (.middlePIP, "middlePIP"), (.middleDIP, "middleDIP"), (.middleTip, "middleTip"),
+        (.ringMCP, "ringMCP"), (.ringPIP, "ringPIP"), (.ringDIP, "ringDIP"), (.ringTip, "ringTip"),
+        (.littleMCP, "littleMCP"), (.littlePIP, "littlePIP"), (.littleDIP, "littleDIP"), (.littleTip, "littleTip")
     ]
 
     init(onResults: @escaping @Sendable ([TrackedHand], [TrackedFace], CGSize) -> Void) {

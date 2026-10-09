@@ -5,7 +5,7 @@
 
 import SwiftUI
 
-/// Draws the face boxes and tracked fingertips over the video.
+/// Draws the face boxes and hand skeletons over the video.
 struct TrackingOverlay: View {
     let hands: [TrackedHand]
     let faces: [TrackedFace]
@@ -24,15 +24,31 @@ struct TrackingOverlay: View {
                     .position(x: box.midX, y: box.minY - 10)
             }
             ForEach(hands) { hand in
-                fingertips(for: hand)
+                skeleton(for: hand)
             }
         }
         .foregroundStyle(.white)
     }
 
-    /// A thin ring on each fingertip with its coordinates above it.
     @ViewBuilder
-    private func fingertips(for hand: TrackedHand) -> some View {
+    private func skeleton(for hand: TrackedHand) -> some View {
+        // From the wrist through each knuckle out to every fingertip.
+        // Joints Vision couldn't see are skipped, joining the neighbors on either side.
+        Path { path in
+            for chain in TrackedHand.skeleton {
+                path.addLines(chain.compactMap { hand.joints[$0] }.map(viewPoint(for:)))
+            }
+        }
+        .stroke(.white.opacity(0.8), lineWidth: 0.75)
+        // Small dots on the wrist and knuckles (fingertips get the larger rings below).
+        ForEach(hand.joints.filter { !$0.key.hasSuffix("Tip") }.map(\.key), id: \.self) { name in
+            if let location = hand.joints[name] {
+                Circle()
+                    .fill(.white)
+                    .frame(width: 3, height: 3)
+                    .position(viewPoint(for: location))
+            }
+        }
         ForEach(hand.fingers) { finger in
             let point = viewPoint(for: finger.location)
             ZStack {

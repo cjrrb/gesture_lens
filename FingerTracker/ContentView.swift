@@ -45,7 +45,7 @@ struct ContentView: View {
         .task { await model.start() }
     }
 
-    /// The face box and thin rings and coordinates over each tracked fingertip.
+    /// The face box and hand skeleton.
     private var fingerOverlay: some View {
         GeometryReader { geometry in
             TrackingOverlay(hands: model.hands, faces: model.faces, rect: videoRect(in: geometry.size))
