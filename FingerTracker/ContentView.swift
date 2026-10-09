@@ -9,7 +9,7 @@ import SwiftUI
 
 /// The finger-controlled sliders overlaid on the video.
 private enum SliderKind: CaseIterable {
-    case brightness
+    case brightness, grain
 }
 
 /// The start of a fingertip drag on a slider; the value moves relative to this, so grabbing never jumps it.
@@ -23,6 +23,8 @@ struct ContentView: View {
     @State private var model = CameraModel()
     /// -1 (dark) … 1 (light).
     @State private var brightness: Double = 0
+    /// 0 (none) … 1 (heavy).
+    @State private var grain: Double = 0
     /// Sliders currently grabbed by a fingertip, with where the drag started.
     @State private var grabs: [SliderKind: SliderGrab] = [:]
     /// When a fingertip started resting on each slider's thumb (before it counts as a grab).
@@ -44,6 +46,7 @@ struct ContentView: View {
                     }
                 }
                 brightnessTint
+                grainOverlay
                 sliders
                 fingerOverlay
                 if let errorMessage = model.errorMessage {
@@ -77,6 +80,19 @@ struct ContentView: View {
         .allowsHitTesting(false)
     }
 
+    /// Animated film grain over the video area.
+    private var grainOverlay: some View {
+        GeometryReader { geometry in
+            let rect = videoRect(in: geometry.size)
+            // The top of the slider maps to 40% grain opacity.
+            GrainOverlay(intensity: grain * 0.4)
+                .frame(width: rect.width, height: rect.height)
+                .clipped()
+                .position(x: rect.midX, y: rect.midY)
+        }
+        .allowsHitTesting(false)
+    }
+
     /// All sliders, driven by index fingertips hovering over them.
     private var sliders: some View {
         GeometryReader { geometry in
@@ -103,6 +119,8 @@ struct ContentView: View {
         case .brightness:
             return FingerSlider(value: brightness, range: -1...1, topLabel: "light", bottomLabel: "dark",
                                 isActive: isActive, format: "%+.2f")
+        case .grain:
+            return FingerSlider(value: grain, range: 0...1, topLabel: "grain", bottomLabel: "none", isActive: isActive)
         }
     }
 
@@ -110,6 +128,7 @@ struct ContentView: View {
     private func setValue(fromFraction fraction: Double, for kind: SliderKind) {
         switch kind {
         case .brightness: brightness = fraction * 2 - 1
+        case .grain: grain = fraction
         }
     }
 
@@ -117,16 +136,18 @@ struct ContentView: View {
     private func valueFraction(for kind: SliderKind) -> Double {
         switch kind {
         case .brightness: (brightness + 1) / 2
+        case .grain: grain
         }
     }
 
-    /// Brightness sits in the top-left. Each slider is a quarter of the video's height.
+    /// Brightness and grain sit in the top-left. Each slider is a quarter of the video's height.
     private func sliderFrame(for kind: SliderKind, in rect: CGRect) -> CGRect {
         let width: CGFloat = 24
         let height = rect.height / 4
         let top = rect.minY + 40
         switch kind {
         case .brightness: return CGRect(x: rect.minX + 32, y: top, width: width, height: height)
+        case .grain: return CGRect(x: rect.minX + 128, y: top, width: width, height: height)
         }
     }
 
