@@ -45,6 +45,7 @@ private struct FingerButtonState {
 }
 
 struct ContentView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @State private var model = CameraModel()
     /// -1 (dark) … 1 (light).
     @State private var brightness: Double = 0
@@ -103,15 +104,16 @@ struct ContentView: View {
                 }
             }
             Rectangle()
-                .fill(.white.opacity(0.3))
+                .fill(sidebarForeground.opacity(0.3))
                 .frame(width: 0.5)
             positionList
                 .frame(width: 240)
+                .foregroundStyle(sidebarForeground)
+                .background(sidebarBackground)
         }
         .font(.system(size: 12, weight: .thin, design: .monospaced))
         .foregroundStyle(.white)
         .background(.black)
-        .preferredColorScheme(.dark)
         .frame(minWidth: 800, minHeight: 500)
         .task { await model.start() }
     }
@@ -520,7 +522,15 @@ struct ContentView: View {
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(.black)
+    }
+
+    /// The sidebar follows the system appearance: white text on black in Dark Mode, black on white in Light Mode.
+    private var sidebarForeground: Color {
+        colorScheme == .dark ? .white : .black
+    }
+
+    private var sidebarBackground: Color {
+        colorScheme == .dark ? .black : .white
     }
 
     /// The aspect-fit rectangle the video occupies inside the given container size.
