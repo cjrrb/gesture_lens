@@ -15,13 +15,20 @@ struct PhotoSettings {
     var hue: Double
     var saturation: Double
     var vignetteColor: Color?
+    /// Hands to draw as skeletons (empty when the skeleton is turned off).
+    var hands: [TrackedHand] = []
+    /// Faces to draw boxes around (empty when the face tracker is turned off).
+    var faces: [TrackedFace] = []
+    /// Width of the video on screen, so tracking overlays can be scaled to look the same in the photo.
+    var onScreenVideoWidth: CGFloat = 0
 }
 
 /// Turns a camera frame into a photo with the same effects as the live preview, and saves it to ~/Pictures/snap_shots.
 enum PhotoRenderer {
     private static let ciContext = CIContext()
 
-    /// Renders a mirrored photo of `pixelBuffer` with every effect applied (but no tracking overlays or controls).
+    /// Renders a mirrored photo of `pixelBuffer` with every effect applied, plus any tracking overlays in
+    /// `settings` (but never the on-screen controls).
     static func render(_ pixelBuffer: CVPixelBuffer, settings: PhotoSettings) -> CGImage? {
         // Mirror to match the preview, then apply the same Core Image color filters as the live view.
         var image = CIImage(cvPixelBuffer: pixelBuffer).oriented(.upMirrored)
@@ -49,6 +56,11 @@ enum PhotoRenderer {
                                    startRadiusFraction: 0.3, endRadiusFraction: 0.75)
             }
             GrainOverlay(intensity: settings.grain * 0.4, animated: false)
+            // Lines and text are sized in on-screen points, so scale them up to the photo's resolution.
+            TrackingOverlay(hands: settings.hands, faces: settings.faces,
+                            showsSkeleton: !settings.hands.isEmpty, showsFaces: !settings.faces.isEmpty,
+                            rect: CGRect(origin: .zero, size: size),
+                            scale: settings.onScreenVideoWidth > 0 ? size.width / settings.onScreenVideoWidth : 1)
         }
         .frame(width: size.width, height: size.height)
 

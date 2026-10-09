@@ -68,6 +68,11 @@ struct ContentView: View {
     @State private var skeletonButton = FingerButtonState()
     /// Whether the hand skeleton is drawn. Hidden or not, fingertips still control the sliders and buttons.
     @State private var showsSkeleton = true
+    @State private var faceButton = FingerButtonState()
+    /// Whether face boxes (and their sidebar coordinates) are shown.
+    @State private var showsFaceTracking = true
+    /// Size of the video area, used to scale tracking overlays when rendering a photo.
+    @State private var videoAreaSize: CGSize = .zero
     /// The number shown during the photo countdown (3, 2, 1), or nil when not counting down.
     @State private var countdown: Int?
     /// How much of the countdown ring is drawn (1 → 0 over each second).
@@ -103,6 +108,7 @@ struct ContentView: View {
                         .padding()
                 }
             }
+            .onGeometryChange(for: CGSize.self) { $0.size } action: { videoAreaSize = $0 }
             Rectangle()
                 .fill(sidebarForeground.opacity(0.3))
                 .frame(width: 0.5)
@@ -173,6 +179,8 @@ struct ContentView: View {
             fingerButton(countdown.map { "[ \($0) ]" } ?? "[ snap ]", state: photoButton, frame: photoFrame)
             let skeletonFrame = skeletonButtonFrame(in: rect)
             fingerButton(showsSkeleton ? "[x] skeleton" : "[ ] skeleton", state: skeletonButton, frame: skeletonFrame)
+            let faceFrame = faceButtonFrame(in: rect)
+            fingerButton(showsFaceTracking ? "[x] face" : "[ ] face", state: faceButton, frame: faceFrame)
             let resetFrame = resetButtonFrame(in: rect)
             fingerButton("[ reset filters ]", state: resetButton, frame: resetFrame)
             Color.clear
@@ -188,6 +196,9 @@ struct ContentView: View {
                     }
                     if skeletonButton.update(with: points, in: skeletonFrame, delay: Self.grabDelay) {
                         showsSkeleton.toggle()
+                    }
+                    if faceButton.update(with: points, in: faceFrame, delay: Self.grabDelay) {
+                        showsFaceTracking.toggle()
                     }
                     if resetButton.update(with: points, in: resetFrame, delay: Self.grabDelay) {
                         resetFilters()
@@ -217,6 +228,14 @@ struct ContentView: View {
     private func skeletonButtonFrame(in rect: CGRect) -> CGRect {
         let photo = photoButtonFrame(in: rect)
         return CGRect(x: photo.maxX - 104, y: photo.maxY + 12, width: 104, height: 32)
+    }
+
+    /// To the left of the skeleton button, on the same row (stacking it lower would collide with the
+    /// reset button in short windows).
+    private func faceButtonFrame(in rect: CGRect) -> CGRect {
+        let skeleton = skeletonButtonFrame(in: rect)
+        let width: CGFloat = 80
+        return CGRect(x: skeleton.minX - 12 - width, y: skeleton.minY, width: width, height: skeleton.height)
     }
 
     /// Centered above the hue and saturation sliders, clear of their top labels.
@@ -306,7 +325,10 @@ struct ContentView: View {
     /// Renders the current frame with all effects applied and saves it to ~/Pictures/snap_shots.
     private func takePhoto() {
         let settings = PhotoSettings(brightness: brightness, grain: grain, hue: hue, saturation: saturation,
-                                     vignetteColor: isVignetteOn ? vignetteColor : nil)
+                                     vignetteColor: isVignetteOn ? vignetteColor : nil,
+                                     hands: showsSkeleton ? model.hands : [],
+                                     faces: showsFaceTracking ? model.faces : [],
+                                     onScreenVideoWidth: videoRect(in: videoAreaSize).width)
         let message: String
         if let frame = model.currentFrame(), let image = PhotoRenderer.render(frame, settings: settings) {
             do {
@@ -470,7 +492,8 @@ struct ContentView: View {
     /// The face box and hand skeleton (or, when the skeleton is hidden, small index-fingertip pointers).
     private var fingerOverlay: some View {
         GeometryReader { geometry in
-            TrackingOverlay(hands: model.hands, faces: model.faces, showsSkeleton: showsSkeleton,
+            TrackingOverlay(hands: model.hands, faces: model.faces,
+                            showsSkeleton: showsSkeleton, showsFaces: showsFaceTracking,
                             rect: videoRect(in: geometry.size), showsPointers: true)
         }
         .allowsHitTesting(false)
@@ -483,24 +506,27 @@ struct ContentView: View {
                 Text("finger_tracker")
                 Text(String(repeating: "─", count: 28))
                     .opacity(0.4)
-                if model.faces.isEmpty && (model.hands.isEmpty || !showsSkeleton) {
+                if (model.faces.isEmpty || !showsFaceTracking) && (model.hands.isEmpty || !showsSkeleton) {
                     Text("> nothing detected_")
                         .opacity(0.6)
                 }
-                ForEach(model.faces) { face in
-                    Text("[face \(face.id + 1)]")
-                        .padding(.top, 8)
-                    HStack {
-                        Text("  center")
-                        Spacer()
-                        Text(formatted(CGPoint(x: face.bounds.midX, y: face.bounds.midY)))
-                            .opacity(0.7)
-                    }
-                    HStack {
-                        Text("  size")
-                        Spacer()
-                        Text(formatted(CGPoint(x: face.bounds.width, y: face.bounds.height)))
-                            .opacity(0.7)
+                // Face coordinates are only listed while the face tracker is on.
+                if showsFaceTracking {
+                    ForEach(model.faces) { face in
+                        Text("[face \(face.id + 1)]")
+                            .padding(.top, 8)
+                        HStack {
+                            Text("  center")
+                            Spacer()
+                            Text(formatted(CGPoint(x: face.bounds.midX, y: face.bounds.midY)))
+                                .opacity(0.7)
+                        }
+                        HStack {
+                            Text("  size")
+                            Spacer()
+                            Text(formatted(CGPoint(x: face.bounds.width, y: face.bounds.height)))
+                                .opacity(0.7)
+                        }
                     }
                 }
                 // Finger coordinates are only listed while the skeleton is shown.
