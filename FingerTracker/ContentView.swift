@@ -7,8 +7,26 @@
 
 import SwiftUI
 
+/// The finger-controlled sliders overlaid on the video.
+private enum SliderKind: CaseIterable {
+    case brightness
+}
+
+/// The start of a fingertip drag on a slider; the value moves relative to this, so grabbing never jumps it.
+private struct SliderGrab {
+    /// Finger position along the slider's axis when grabbed, as a fraction of the slider's length.
+    let startPosition: CGFloat
+    let startFraction: Double
+}
+
 struct ContentView: View {
     @State private var model = CameraModel()
+    /// -1 (dark) … 1 (light).
+    @State private var brightness: Double = 0
+    /// Sliders currently grabbed by a fingertip, with where the drag started.
+    @State private var grabs: [SliderKind: SliderGrab] = [:]
+    /// When a fingertip started resting on each slider's thumb (before it counts as a grab).
+    @State private var hoverStarts: [SliderKind: Date] = [:]
 
     var body: some View {
         HStack(spacing: 0) {
@@ -25,6 +43,8 @@ struct ContentView: View {
                             .position(x: rect.midX, y: rect.midY)
                     }
                 }
+                brightnessTint
+                sliders
                 fingerOverlay
                 if let errorMessage = model.errorMessage {
                     Text("> \(errorMessage)")
@@ -43,6 +63,113 @@ struct ContentView: View {
         .preferredColorScheme(.dark)
         .frame(minWidth: 800, minHeight: 500)
         .task { await model.start() }
+    }
+
+    /// White or black tint over the video area to lighten or darken the camera image.
+    private var brightnessTint: some View {
+        GeometryReader { geometry in
+            let rect = videoRect(in: geometry.size)
+            Rectangle()
+                .fill(brightness >= 0 ? Color.white.opacity(brightness * 0.6) : Color.black.opacity(-brightness * 0.85))
+                .frame(width: rect.width, height: rect.height)
+                .position(x: rect.midX, y: rect.midY)
+        }
+        .allowsHitTesting(false)
+    }
+
+    /// All sliders, driven by index fingertips hovering over them.
+    private var sliders: some View {
+        GeometryReader { geometry in
+            let rect = videoRect(in: geometry.size)
+            ForEach(SliderKind.allCases, id: \.self) { kind in
+                let frame = sliderFrame(for: kind, in: rect)
+                slider(for: kind)
+                    .frame(width: frame.width, height: frame.height)
+                    .position(x: frame.midX, y: frame.midY)
+            }
+            Color.clear
+                .onChange(of: model.hands.compactMap { $0.joints["indexTip"] }.map { viewPoint(for: $0, in: rect) }) { _, points in
+                    for kind in SliderKind.allCases {
+                        updateSlider(kind, with: points, in: sliderFrame(for: kind, in: rect))
+                    }
+                }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func slider(for kind: SliderKind) -> FingerSlider {
+        let isActive = grabs[kind] != nil
+        switch kind {
+        case .brightness:
+            return FingerSlider(value: brightness, range: -1...1, topLabel: "light", bottomLabel: "dark",
+                                isActive: isActive, format: "%+.2f")
+        }
+    }
+
+    /// Maps a slider position (0 = bottom, 1 = top) onto the slider's value range.
+    private func setValue(fromFraction fraction: Double, for kind: SliderKind) {
+        switch kind {
+        case .brightness: brightness = fraction * 2 - 1
+        }
+    }
+
+    /// The slider's current value as a position (0 = bottom, 1 = top), i.e. where its thumb is.
+    private func valueFraction(for kind: SliderKind) -> Double {
+        switch kind {
+        case .brightness: (brightness + 1) / 2
+        }
+    }
+
+    /// Brightness sits in the top-left. Each slider is a quarter of the video's height.
+    private func sliderFrame(for kind: SliderKind, in rect: CGRect) -> CGRect {
+        let width: CGFloat = 24
+        let height = rect.height / 4
+        let top = rect.minY + 40
+        switch kind {
+        case .brightness: return CGRect(x: rect.minX + 32, y: top, width: width, height: height)
+        }
+    }
+
+    /// How long a fingertip must rest on a thumb before it grabs it, so fingers passing over don't.
+    private static let grabDelay: TimeInterval = 0.25
+
+    /// Drives one slider from the current index fingertip positions.
+    ///
+    /// The value only changes by dragging the thumb: a fingertip has to rest on the thumb briefly to grab it,
+    /// then the value moves by however far the finger moves from where it grabbed (never jumping to the
+    /// finger's position). The grab is released when the finger leaves the track.
+    private func updateSlider(_ kind: SliderKind, with points: [CGPoint], in frame: CGRect) {
+        // Position along the slider, as a fraction of its length (up is positive).
+        func alongAxis(_ point: CGPoint) -> CGFloat {
+            -point.y / frame.height
+        }
+
+        if let grab = grabs[kind] {
+            let onTrack = points.first { point in
+                abs(point.x - frame.midX) < 28 && point.y > frame.minY - 24 && point.y < frame.maxY + 24
+            }
+            guard let point = onTrack else {
+                grabs[kind] = nil
+                return
+            }
+            let fraction = grab.startFraction + (alongAxis(point) - grab.startPosition)
+            setValue(fromFraction: min(max(fraction, 0), 1), for: kind)
+            return
+        }
+
+        let thumbFraction = valueFraction(for: kind)
+        let thumb = CGPoint(x: frame.midX, y: frame.minY + (1 - thumbFraction) * frame.height)
+        guard let point = points.first(where: { hypot($0.x - thumb.x, $0.y - thumb.y) < 24 }) else {
+            hoverStarts[kind] = nil
+            return
+        }
+        let now = Date.now
+        let hoverStart = hoverStarts[kind] ?? now
+        hoverStarts[kind] = hoverStart
+        if now.timeIntervalSince(hoverStart) >= Self.grabDelay {
+            grabs[kind] = SliderGrab(startPosition: alongAxis(point), startFraction: thumbFraction)
+            hoverStarts[kind] = nil
+        }
     }
 
     /// The face box and hand skeleton.
@@ -110,6 +237,12 @@ struct ContentView: View {
             let height = size.width / videoAspect
             return CGRect(x: 0, y: (size.height - height) / 2, width: size.width, height: height)
         }
+    }
+
+    /// Converts a normalized location into a point within the video rectangle.
+    private func viewPoint(for location: CGPoint, in rect: CGRect) -> CGPoint {
+        CGPoint(x: rect.minX + location.x * rect.width,
+                y: rect.minY + location.y * rect.height)
     }
 
     private func formatted(_ point: CGPoint) -> String {
