@@ -9,8 +9,11 @@ import SwiftUI
 struct TrackingOverlay: View {
     let hands: [TrackedHand]
     let faces: [TrackedFace]
+    let showsSkeleton: Bool
     /// The video's rectangle in this view's coordinates; normalized positions are mapped into it.
     let rect: CGRect
+    /// When the skeleton is hidden, draw small index-fingertip pointers for aiming at controls (live view only).
+    var showsPointers = false
 
     var body: some View {
         ZStack {
@@ -23,8 +26,21 @@ struct TrackingOverlay: View {
                 label(Self.formatted(CGPoint(x: face.bounds.midX, y: face.bounds.midY)))
                     .position(x: box.midX, y: box.minY - 10)
             }
-            ForEach(hands) { hand in
-                skeleton(for: hand)
+            if showsSkeleton {
+                ForEach(hands) { hand in
+                    skeleton(for: hand)
+                }
+            } else if showsPointers {
+                // Skeleton hidden: tracking still drives the controls, so keep a small pointer
+                // on each index fingertip to aim at sliders and buttons.
+                ForEach(hands) { hand in
+                    if let indexTip = hand.joints["indexTip"] {
+                        Circle()
+                            .stroke(.white.opacity(0.6), lineWidth: 0.75)
+                            .frame(width: 10, height: 10)
+                            .position(viewPoint(for: indexTip))
+                    }
+                }
             }
         }
         .foregroundStyle(.white)

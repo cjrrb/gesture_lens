@@ -63,6 +63,10 @@ struct ContentView: View {
     @State private var vignetteTone: Double = 0
     @State private var vignetteButton = FingerButtonState()
     @State private var photoButton = FingerButtonState()
+    @State private var resetButton = FingerButtonState()
+    @State private var skeletonButton = FingerButtonState()
+    /// Whether the hand skeleton is drawn. Hidden or not, fingertips still control the sliders and buttons.
+    @State private var showsSkeleton = true
     /// The number shown during the photo countdown (3, 2, 1), or nil when not counting down.
     @State private var countdown: Int?
     /// How much of the countdown ring is drawn (1 → 0 over each second).
@@ -165,6 +169,10 @@ struct ContentView: View {
             fingerButton(isVignetteOn ? "[x] vignette" : "[ ] vignette", state: vignetteButton, frame: vignetteFrame)
             let photoFrame = photoButtonFrame(in: rect)
             fingerButton(countdown.map { "[ \($0) ]" } ?? "[ snap ]", state: photoButton, frame: photoFrame)
+            let skeletonFrame = skeletonButtonFrame(in: rect)
+            fingerButton(showsSkeleton ? "[x] skeleton" : "[ ] skeleton", state: skeletonButton, frame: skeletonFrame)
+            let resetFrame = resetButtonFrame(in: rect)
+            fingerButton("[ reset filters ]", state: resetButton, frame: resetFrame)
             Color.clear
                 .onChange(of: model.hands.compactMap { $0.joints["indexTip"] }.map { viewPoint(for: $0, in: rect) }) { _, points in
                     for kind in SliderKind.allCases {
@@ -175,6 +183,12 @@ struct ContentView: View {
                     }
                     if photoButton.update(with: points, in: photoFrame, delay: Self.grabDelay) {
                         startPhotoCountdown()
+                    }
+                    if skeletonButton.update(with: points, in: skeletonFrame, delay: Self.grabDelay) {
+                        showsSkeleton.toggle()
+                    }
+                    if resetButton.update(with: points, in: resetFrame, delay: Self.grabDelay) {
+                        resetFilters()
                     }
                 }
         }
@@ -195,6 +209,34 @@ struct ContentView: View {
     /// A small button in the top-right corner of the video.
     private func photoButtonFrame(in rect: CGRect) -> CGRect {
         CGRect(x: rect.maxX - 32 - 72, y: rect.minY + 40, width: 72, height: 32)
+    }
+
+    /// Just below the photo button, right-aligned with it.
+    private func skeletonButtonFrame(in rect: CGRect) -> CGRect {
+        let photo = photoButtonFrame(in: rect)
+        return CGRect(x: photo.maxX - 104, y: photo.maxY + 12, width: 104, height: 32)
+    }
+
+    /// Centered above the hue and saturation sliders, clear of their top labels.
+    private func resetButtonFrame(in rect: CGRect) -> CGRect {
+        let hue = sliderFrame(for: .hue, in: rect)
+        let saturation = sliderFrame(for: .saturation, in: rect)
+        let width: CGFloat = 136
+        return CGRect(x: (hue.midX + saturation.midX) / 2 - width / 2, y: hue.minY - 28 - 32, width: width, height: 32)
+    }
+
+    /// Puts every filter back to its default and turns the vignette off.
+    private func resetFilters() {
+        withAnimation(.easeOut(duration: 0.3)) {
+            brightness = 0
+            grain = 0
+            hue = 0
+            saturation = 1
+            vignetteTone = 0
+            isVignetteOn = false
+        }
+        grabs = [:]
+        hoverStarts = [:]
     }
 
     /// The countdown, the capture flash, and the save message.
@@ -423,10 +465,11 @@ struct ContentView: View {
         }
     }
 
-    /// The face box and hand skeleton.
+    /// The face box and hand skeleton (or, when the skeleton is hidden, small index-fingertip pointers).
     private var fingerOverlay: some View {
         GeometryReader { geometry in
-            TrackingOverlay(hands: model.hands, faces: model.faces, rect: videoRect(in: geometry.size))
+            TrackingOverlay(hands: model.hands, faces: model.faces, showsSkeleton: showsSkeleton,
+                            rect: videoRect(in: geometry.size), showsPointers: true)
         }
         .allowsHitTesting(false)
     }
@@ -438,7 +481,7 @@ struct ContentView: View {
                 Text("finger_tracker")
                 Text(String(repeating: "─", count: 28))
                     .opacity(0.4)
-                if model.faces.isEmpty && model.hands.isEmpty {
+                if model.faces.isEmpty && (model.hands.isEmpty || !showsSkeleton) {
                     Text("> nothing detected_")
                         .opacity(0.6)
                 }
@@ -458,15 +501,18 @@ struct ContentView: View {
                             .opacity(0.7)
                     }
                 }
-                ForEach(model.hands) { hand in
-                    Text("[hand \(hand.id + 1)]")
-                        .padding(.top, 8)
-                    ForEach(hand.fingers) { finger in
-                        HStack {
-                            Text("  \(finger.name.lowercased())")
-                            Spacer()
-                            Text(formatted(finger.location))
-                                .opacity(0.7)
+                // Finger coordinates are only listed while the skeleton is shown.
+                if showsSkeleton {
+                    ForEach(model.hands) { hand in
+                        Text("[hand \(hand.id + 1)]")
+                            .padding(.top, 8)
+                        ForEach(hand.fingers) { finger in
+                            HStack {
+                                Text("  \(finger.name.lowercased())")
+                                Spacer()
+                                Text(formatted(finger.location))
+                                    .opacity(0.7)
+                            }
                         }
                     }
                 }
