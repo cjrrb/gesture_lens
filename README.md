@@ -8,7 +8,7 @@
 
 <p align="center"><code>[ track ]</code> · <code>[ filter ]</code> · <code>[ snap ]</code></p>
 
-gesture_lens tracks your hands and face through your Mac's camera and draws them in a minimal, terminal-style overlay. Point your index finger at the on-screen sliders and buttons to adjust the image and take photos, all hands-free.
+gesture_lens tracks your hands and face through your Mac's camera and draws them in a minimal, terminal-style overlay. Point your index finger at the on-screen sliders and buttons to adjust the image and take photos.
 
 ## `> features_`
 
@@ -18,7 +18,7 @@ gesture_lens tracks your hands and face through your Mac's camera and draws them
 [filters]   brightness · grain · hue · saturation · vignette color
 [photos]    3‑2‑1 countdown, saved to ~/Pictures/snap_shots
             (with your filters and, optionally, the tracking overlays)
-[sidebar]   live position of every tracked finger and face, in light or dark
+[sidebar]   live position of every tracked finger and face
 [privacy]   everything runs on your Mac, nothing is sent over the network
 ```
 
