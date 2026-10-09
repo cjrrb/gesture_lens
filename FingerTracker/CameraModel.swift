@@ -45,6 +45,37 @@ final class CameraModel {
     private(set) var isConfigured = false
 
     @ObservationIgnored private var processor: FrameProcessor?
+    /// Last smoothed position for each hand joint, keyed by "<hand id>-<joint name>".
+    @ObservationIgnored private var smoothedLocations: [String: CGPoint] = [:]
+
+    /// How much of each new reading to blend in (lower = steadier but laggier).
+    private static let smoothingFactor: CGFloat = 0.3
+    /// Movements larger than this (normalized) snap immediately instead of easing in.
+    private static let snapDistance: CGFloat = 0.15
+
+    /// Applies exponential smoothing to hand joint positions to reduce frame-to-frame jitter.
+    private func smoothed(_ hands: [TrackedHand]) -> [TrackedHand] {
+        var updated: [String: CGPoint] = [:]
+        let result = hands.map { hand in
+            var joints: [String: CGPoint] = [:]
+            for (name, raw) in hand.joints {
+                let key = "\(hand.id)-\(name)"
+                var location = raw
+                if let previous = smoothedLocations[key],
+                   hypot(location.x - previous.x, location.y - previous.y) < Self.snapDistance {
+                    let a = Self.smoothingFactor
+                    location = CGPoint(x: previous.x + a * (location.x - previous.x),
+                                       y: previous.y + a * (location.y - previous.y))
+                }
+                updated[key] = location
+                joints[name] = location
+            }
+            return TrackedHand(id: hand.id, joints: joints)
+        }
+        // Only keep joints seen this frame, so a reappearing joint starts fresh.
+        smoothedLocations = updated
+        return result
+    }
 
     func start() async {
         guard !isConfigured else { return }
@@ -63,7 +94,7 @@ final class CameraModel {
         // A main-actor closure is Sendable, so the capture queue can hop back to it safely.
         let update: @MainActor ([TrackedHand], CGSize) -> Void = { [weak self] hands, size in
             guard let self else { return }
-            self.hands = hands
+            self.hands = smoothed(hands)
             self.videoSize = size
         }
         let processor = FrameProcessor { hands, size in
