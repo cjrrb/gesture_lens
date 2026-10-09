@@ -9,7 +9,7 @@ import SwiftUI
 
 /// The finger-controlled sliders overlaid on the video.
 private enum SliderKind: CaseIterable {
-    case brightness, grain
+    case brightness, grain, hue, saturation
 }
 
 /// The start of a fingertip drag on a slider; the value moves relative to this, so grabbing never jumps it.
@@ -25,6 +25,10 @@ struct ContentView: View {
     @State private var brightness: Double = 0
     /// 0 (none) … 1 (heavy).
     @State private var grain: Double = 0
+    /// Hue rotation in degrees, within `hueRange`.
+    @State private var hue: Double = 0
+    /// Saturation multiplier, 0 (grayscale) … 2 (double).
+    @State private var saturation: Double = 1
     /// Sliders currently grabbed by a fingertip, with where the drag started.
     @State private var grabs: [SliderKind: SliderGrab] = [:]
     /// When a fingertip started resting on each slider's thumb (before it counts as a grab).
@@ -39,7 +43,7 @@ struct ContentView: View {
                     // Pin the preview to the same rect the overlays use, so filters and tracking always line up.
                     GeometryReader { geometry in
                         let rect = videoRect(in: geometry.size)
-                        CameraPreview(session: model.session)
+                        CameraPreview(session: model.session, hue: hue, saturation: saturation)
                             .scaleEffect(x: -1, y: 1)
                             .frame(width: rect.width, height: rect.height)
                             .position(x: rect.midX, y: rect.midY)
@@ -121,14 +125,25 @@ struct ContentView: View {
                                 isActive: isActive, format: "%+.2f")
         case .grain:
             return FingerSlider(value: grain, range: 0...1, topLabel: "grain", bottomLabel: "none", isActive: isActive)
+        case .hue:
+            return FingerSlider(value: hue, range: Self.hueRange, topLabel: "hue+", bottomLabel: "hue-",
+                                isActive: isActive, format: "%+.0f°")
+        case .saturation:
+            return FingerSlider(value: saturation, range: 0...2, topLabel: "vivid", bottomLabel: "mono", isActive: isActive)
         }
     }
+
+    /// ±150° rather than ±180°, so the two ends of the hue slider are visibly different colors
+    /// (a full ±180° would make the top and bottom the same hue).
+    private static let hueRange: ClosedRange<Double> = -150...150
 
     /// Maps a slider position (0 = bottom, 1 = top) onto the slider's value range.
     private func setValue(fromFraction fraction: Double, for kind: SliderKind) {
         switch kind {
         case .brightness: brightness = fraction * 2 - 1
         case .grain: grain = fraction
+        case .hue: hue = Self.hueRange.lowerBound + fraction * (Self.hueRange.upperBound - Self.hueRange.lowerBound)
+        case .saturation: saturation = fraction * 2
         }
     }
 
@@ -137,17 +152,24 @@ struct ContentView: View {
         switch kind {
         case .brightness: (brightness + 1) / 2
         case .grain: grain
+        case .hue: (hue - Self.hueRange.lowerBound) / (Self.hueRange.upperBound - Self.hueRange.lowerBound)
+        case .saturation: saturation / 2
         }
     }
 
-    /// Brightness and grain sit in the top-left. Each slider is a quarter of the video's height.
+    /// Brightness and grain sit in the top-left; hue and saturation in the bottom-right.
+    /// Each slider is a quarter of the video's height.
     private func sliderFrame(for kind: SliderKind, in rect: CGRect) -> CGRect {
         let width: CGFloat = 24
         let height = rect.height / 4
         let top = rect.minY + 40
+        let bottom = rect.maxY - 40 - height
         switch kind {
         case .brightness: return CGRect(x: rect.minX + 32, y: top, width: width, height: height)
         case .grain: return CGRect(x: rect.minX + 128, y: top, width: width, height: height)
+        // Leave room on the right for each slider's value label.
+        case .hue: return CGRect(x: rect.maxX - 176, y: bottom, width: width, height: height)
+        case .saturation: return CGRect(x: rect.maxX - 80, y: bottom, width: width, height: height)
         }
     }
 
