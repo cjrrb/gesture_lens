@@ -503,7 +503,7 @@ struct ContentView: View {
     private var positionList: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 6) {
-                Text("finger_tracker")
+                Text("gesture_lens")
                 Text(String(repeating: "─", count: 28))
                     .opacity(0.4)
                 if (model.faces.isEmpty || !showsFaceTracking) && (model.hands.isEmpty || !showsSkeleton) {

@@ -79,7 +79,7 @@ enum PhotoRenderer {
 
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
-        let url = folder.appending(path: "finger_tracker \(formatter.string(from: .now)).jpg")
+        let url = folder.appending(path: "gesture_lens \(formatter.string(from: .now)).jpg")
 
         guard let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else {
             throw CocoaError(.fileWriteUnknown)

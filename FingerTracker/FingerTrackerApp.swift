@@ -10,7 +10,7 @@ import SwiftUI
 @main
 struct FingerTrackerApp: App {
     var body: some Scene {
-        WindowGroup {
+        WindowGroup("gesture_lens") {
             ContentView()
         }
     }
