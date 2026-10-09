@@ -9,7 +9,7 @@ import SwiftUI
 
 /// The finger-controlled sliders overlaid on the video.
 private enum SliderKind: CaseIterable {
-    case brightness, grain, hue, saturation
+    case brightness, grain, hue, saturation, vignetteColor
 }
 
 /// The start of a fingertip drag on a slider; the value moves relative to this, so grabbing never jumps it.
@@ -17,6 +17,31 @@ private struct SliderGrab {
     /// Finger position along the slider's axis when grabbed, as a fraction of the slider's length.
     let startPosition: CGFloat
     let startFraction: Double
+}
+
+/// Tracks a fingertip "tap" on an on-screen button: the finger must rest on the button briefly to tap it,
+/// then leave before it can tap again, so resting doesn't repeat.
+private struct FingerButtonState {
+    /// When a fingertip started resting on the button (before it counts as a tap).
+    var hoverStart: Date?
+    var needsRelease = false
+
+    /// Returns true when this update completes a tap.
+    mutating func update(with points: [CGPoint], in frame: CGRect, delay: TimeInterval) -> Bool {
+        guard points.contains(where: { frame.contains($0) }) else {
+            hoverStart = nil
+            needsRelease = false
+            return false
+        }
+        guard !needsRelease else { return false }
+        let now = Date.now
+        let start = hoverStart ?? now
+        hoverStart = start
+        guard now.timeIntervalSince(start) >= delay else { return false }
+        hoverStart = nil
+        needsRelease = true
+        return true
+    }
 }
 
 struct ContentView: View {
@@ -33,6 +58,10 @@ struct ContentView: View {
     @State private var grabs: [SliderKind: SliderGrab] = [:]
     /// When a fingertip started resting on each slider's thumb (before it counts as a grab).
     @State private var hoverStarts: [SliderKind: Date] = [:]
+    @State private var isVignetteOn = false
+    /// 0 … 1 slider position for the vignette color; the bottom section is black, above it runs through the hues.
+    @State private var vignetteTone: Double = 0
+    @State private var vignetteButton = FingerButtonState()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -50,6 +79,7 @@ struct ContentView: View {
                     }
                 }
                 brightnessTint
+                vignetteOverlay
                 grainOverlay
                 sliders
                 fingerOverlay
@@ -97,7 +127,21 @@ struct ContentView: View {
         .allowsHitTesting(false)
     }
 
-    /// All sliders, driven by index fingertips hovering over them.
+    /// Darkened edges over the video area, faded in and out by the vignette button.
+    private var vignetteOverlay: some View {
+        GeometryReader { geometry in
+            let rect = videoRect(in: geometry.size)
+            EllipticalGradient(colors: [.clear, vignetteColor.opacity(0.8)], center: .center,
+                               startRadiusFraction: 0.3, endRadiusFraction: 0.75)
+                .frame(width: rect.width, height: rect.height)
+                .position(x: rect.midX, y: rect.midY)
+                .opacity(isVignetteOn ? 1 : 0)
+                .animation(.easeInOut(duration: 0.4), value: isVignetteOn)
+        }
+        .allowsHitTesting(false)
+    }
+
+    /// All sliders and the vignette button, driven by index fingertips hovering over them.
     private var sliders: some View {
         GeometryReader { geometry in
             let rect = videoRect(in: geometry.size)
@@ -107,14 +151,49 @@ struct ContentView: View {
                     .frame(width: frame.width, height: frame.height)
                     .position(x: frame.midX, y: frame.midY)
             }
+            let vignetteFrame = vignetteButtonFrame(in: rect)
+            fingerButton(isVignetteOn ? "[x] vignette" : "[ ] vignette", state: vignetteButton, frame: vignetteFrame)
             Color.clear
                 .onChange(of: model.hands.compactMap { $0.joints["indexTip"] }.map { viewPoint(for: $0, in: rect) }) { _, points in
                     for kind in SliderKind.allCases {
                         updateSlider(kind, with: points, in: sliderFrame(for: kind, in: rect))
                     }
+                    if vignetteButton.update(with: points, in: vignetteFrame, delay: Self.grabDelay) {
+                        isVignetteOn.toggle()
+                    }
                 }
         }
         .allowsHitTesting(false)
+    }
+
+    /// A thin outlined button that lights up while a fingertip rests on it.
+    private func fingerButton(_ title: String, state: FingerButtonState, frame: CGRect) -> some View {
+        Text(title)
+            .font(.system(size: 10, weight: .thin, design: .monospaced))
+            .shadow(color: .black.opacity(0.8), radius: 2)
+            .frame(width: frame.width, height: frame.height)
+            .overlay(Rectangle().stroke(.white, lineWidth: 0.75))
+            .background(Rectangle().fill(.white.opacity(state.hoverStart != nil ? 0.2 : 0)))
+            .position(x: frame.midX, y: frame.midY)
+    }
+
+    /// Length of the horizontal vignette color slider: a fifth of the video's width.
+    private func vignetteSliderLength(in rect: CGRect) -> CGFloat {
+        rect.width / 5
+    }
+
+    /// Sits near the bottom-left corner, raised off the bottom edge where hands are harder to track,
+    /// and centered under the vignette color slider.
+    private func vignetteButtonFrame(in rect: CGRect) -> CGRect {
+        let width: CGFloat = 96
+        let sliderMidX = rect.minX + 32 + vignetteSliderLength(in: rect) / 2
+        return CGRect(x: sliderMidX - width / 2, y: rect.maxY - 80 - 36, width: width, height: 36)
+    }
+
+    /// The slider's bottom 10% picks black; above that it sweeps hues from red through to magenta.
+    private var vignetteColor: Color {
+        guard vignetteTone >= 0.1 else { return .black }
+        return Color(hue: (vignetteTone - 0.1) / 0.9 * 0.9, saturation: 0.85, brightness: 0.45)
     }
 
     private func slider(for kind: SliderKind) -> FingerSlider {
@@ -130,6 +209,9 @@ struct ContentView: View {
                                 isActive: isActive, format: "%+.0f°")
         case .saturation:
             return FingerSlider(value: saturation, range: 0...2, topLabel: "vivid", bottomLabel: "mono", isActive: isActive)
+        case .vignetteColor:
+            return FingerSlider(value: vignetteTone, range: 0...1, topLabel: "color", bottomLabel: "black",
+                                isActive: isActive, swatch: vignetteColor, axis: .horizontal)
         }
     }
 
@@ -137,28 +219,36 @@ struct ContentView: View {
     /// (a full ±180° would make the top and bottom the same hue).
     private static let hueRange: ClosedRange<Double> = -150...150
 
-    /// Maps a slider position (0 = bottom, 1 = top) onto the slider's value range.
+    /// Only the vignette color slider runs left to right; the rest are vertical.
+    private func isHorizontal(_ kind: SliderKind) -> Bool {
+        kind == .vignetteColor
+    }
+
+    /// Maps a slider position (0 = bottom/left, 1 = top/right) onto the slider's value range.
     private func setValue(fromFraction fraction: Double, for kind: SliderKind) {
         switch kind {
         case .brightness: brightness = fraction * 2 - 1
         case .grain: grain = fraction
         case .hue: hue = Self.hueRange.lowerBound + fraction * (Self.hueRange.upperBound - Self.hueRange.lowerBound)
         case .saturation: saturation = fraction * 2
+        case .vignetteColor: vignetteTone = fraction
         }
     }
 
-    /// The slider's current value as a position (0 = bottom, 1 = top), i.e. where its thumb is.
+    /// The slider's current value as a position (0 = bottom/left, 1 = top/right), i.e. where its thumb is.
     private func valueFraction(for kind: SliderKind) -> Double {
         switch kind {
         case .brightness: (brightness + 1) / 2
         case .grain: grain
         case .hue: (hue - Self.hueRange.lowerBound) / (Self.hueRange.upperBound - Self.hueRange.lowerBound)
         case .saturation: saturation / 2
+        case .vignetteColor: vignetteTone
         }
     }
 
-    /// Brightness and grain sit in the top-left; hue and saturation in the bottom-right.
-    /// Each slider is a quarter of the video's height.
+    /// Brightness and grain sit in the top-left; hue and saturation in the bottom-right;
+    /// the horizontal vignette color slider sits just above the vignette button.
+    /// Vertical sliders are a quarter of the video's height; the horizontal one a fifth of its width.
     private func sliderFrame(for kind: SliderKind, in rect: CGRect) -> CGRect {
         let width: CGFloat = 24
         let height = rect.height / 4
@@ -170,6 +260,10 @@ struct ContentView: View {
         // Leave room on the right for each slider's value label.
         case .hue: return CGRect(x: rect.maxX - 176, y: bottom, width: width, height: height)
         case .saturation: return CGRect(x: rect.maxX - 80, y: bottom, width: width, height: height)
+        case .vignetteColor:
+            // Leave room between the track and the button for its end labels.
+            let button = vignetteButtonFrame(in: rect)
+            return CGRect(x: rect.minX + 32, y: button.minY - 48, width: vignetteSliderLength(in: rect), height: width)
         }
     }
 
@@ -182,14 +276,19 @@ struct ContentView: View {
     /// then the value moves by however far the finger moves from where it grabbed (never jumping to the
     /// finger's position). The grab is released when the finger leaves the track.
     private func updateSlider(_ kind: SliderKind, with points: [CGPoint], in frame: CGRect) {
-        // Position along the slider, as a fraction of its length (up is positive).
+        let horizontal = isHorizontal(kind)
+        // Position along the slider's axis, as a fraction of its length (up and right are positive).
         func alongAxis(_ point: CGPoint) -> CGFloat {
-            -point.y / frame.height
+            horizontal ? point.x / frame.width : -point.y / frame.height
         }
 
         if let grab = grabs[kind] {
             let onTrack = points.first { point in
-                abs(point.x - frame.midX) < 28 && point.y > frame.minY - 24 && point.y < frame.maxY + 24
+                if horizontal {
+                    abs(point.y - frame.midY) < 28 && point.x > frame.minX - 24 && point.x < frame.maxX + 24
+                } else {
+                    abs(point.x - frame.midX) < 28 && point.y > frame.minY - 24 && point.y < frame.maxY + 24
+                }
             }
             guard let point = onTrack else {
                 grabs[kind] = nil
@@ -201,7 +300,9 @@ struct ContentView: View {
         }
 
         let thumbFraction = valueFraction(for: kind)
-        let thumb = CGPoint(x: frame.midX, y: frame.minY + (1 - thumbFraction) * frame.height)
+        let thumb = horizontal
+            ? CGPoint(x: frame.minX + thumbFraction * frame.width, y: frame.midY)
+            : CGPoint(x: frame.midX, y: frame.minY + (1 - thumbFraction) * frame.height)
         guard let point = points.first(where: { hypot($0.x - thumb.x, $0.y - thumb.y) < 24 }) else {
             hoverStarts[kind] = nil
             return
