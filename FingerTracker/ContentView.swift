@@ -62,6 +62,15 @@ struct ContentView: View {
     /// 0 … 1 slider position for the vignette color; the bottom section is black, above it runs through the hues.
     @State private var vignetteTone: Double = 0
     @State private var vignetteButton = FingerButtonState()
+    @State private var photoButton = FingerButtonState()
+    /// The number shown during the photo countdown (3, 2, 1), or nil when not counting down.
+    @State private var countdown: Int?
+    /// How much of the countdown ring is drawn (1 → 0 over each second).
+    @State private var countdownProgress: CGFloat = 1
+    /// Briefly true right as a photo is taken, for the white flash.
+    @State private var isFlashing = false
+    /// A short message after taking a photo (where it was saved, or what went wrong).
+    @State private var photoStatus: String?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -83,6 +92,7 @@ struct ContentView: View {
                 grainOverlay
                 sliders
                 fingerOverlay
+                photoOverlay
                 if let errorMessage = model.errorMessage {
                     Text("> \(errorMessage)")
                         .padding()
@@ -153,6 +163,8 @@ struct ContentView: View {
             }
             let vignetteFrame = vignetteButtonFrame(in: rect)
             fingerButton(isVignetteOn ? "[x] vignette" : "[ ] vignette", state: vignetteButton, frame: vignetteFrame)
+            let photoFrame = photoButtonFrame(in: rect)
+            fingerButton(countdown.map { "[ \($0) ]" } ?? "[ snap ]", state: photoButton, frame: photoFrame)
             Color.clear
                 .onChange(of: model.hands.compactMap { $0.joints["indexTip"] }.map { viewPoint(for: $0, in: rect) }) { _, points in
                     for kind in SliderKind.allCases {
@@ -160,6 +172,9 @@ struct ContentView: View {
                     }
                     if vignetteButton.update(with: points, in: vignetteFrame, delay: Self.grabDelay) {
                         isVignetteOn.toggle()
+                    }
+                    if photoButton.update(with: points, in: photoFrame, delay: Self.grabDelay) {
+                        startPhotoCountdown()
                     }
                 }
         }
@@ -175,6 +190,98 @@ struct ContentView: View {
             .overlay(Rectangle().stroke(.white, lineWidth: 0.75))
             .background(Rectangle().fill(.white.opacity(state.hoverStart != nil ? 0.2 : 0)))
             .position(x: frame.midX, y: frame.midY)
+    }
+
+    /// A small button in the top-right corner of the video.
+    private func photoButtonFrame(in rect: CGRect) -> CGRect {
+        CGRect(x: rect.maxX - 32 - 72, y: rect.minY + 40, width: 72, height: 32)
+    }
+
+    /// The countdown, the capture flash, and the save message.
+    private var photoOverlay: some View {
+        GeometryReader { geometry in
+            let rect = videoRect(in: geometry.size)
+            if let countdown {
+                // Terminal-style countdown: a thin ring that empties over each second around a bracketed number.
+                ZStack {
+                    Circle()
+                        .stroke(.white.opacity(0.25), lineWidth: 0.75)
+                    Circle()
+                        .trim(from: 0, to: countdownProgress)
+                        .stroke(.white, lineWidth: 0.75)
+                        .rotationEffect(.degrees(-90))
+                    Text("[ \(countdown) ]")
+                        .font(.system(size: 28, weight: .thin, design: .monospaced))
+                        .contentTransition(.numericText(countsDown: true))
+                    Text("> capturing_")
+                        .font(.system(size: 10, weight: .thin, design: .monospaced))
+                        .opacity(0.7)
+                        .offset(y: 80)
+                }
+                .frame(width: 120, height: 120)
+                .shadow(color: .black.opacity(0.8), radius: 2)
+                .position(x: rect.midX, y: rect.midY)
+                .transition(.opacity)
+            }
+            Rectangle()
+                .fill(.white)
+                .frame(width: rect.width, height: rect.height)
+                .position(x: rect.midX, y: rect.midY)
+                .opacity(isFlashing ? 0.9 : 0)
+            if let photoStatus {
+                Text(photoStatus)
+                    .font(.system(size: 11, weight: .thin, design: .monospaced))
+                    .shadow(color: .black.opacity(0.8), radius: 2)
+                    .fixedSize()
+                    .position(x: rect.midX, y: rect.maxY - 24)
+                    .transition(.opacity)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    /// Counts down 3, 2, 1 in the middle of the screen, then takes the photo. Ignored if already counting.
+    private func startPhotoCountdown() {
+        guard countdown == nil else { return }
+        Task {
+            for number in [3, 2, 1] {
+                // Refill the ring instantly, give SwiftUI a frame to draw it full, then drain it over the second.
+                countdownProgress = 1
+                withAnimation(.easeOut(duration: 0.3)) { countdown = number }
+                try? await Task.sleep(for: .milliseconds(20))
+                withAnimation(.linear(duration: 0.98)) { countdownProgress = 0 }
+                try? await Task.sleep(for: .milliseconds(980))
+            }
+            withAnimation(.easeOut(duration: 0.2)) { countdown = nil }
+            takePhoto()
+            isFlashing = true
+            withAnimation(.easeOut(duration: 0.5)) { isFlashing = false }
+        }
+    }
+
+    /// Renders the current frame with all effects applied and saves it to ~/Pictures/snap_shots.
+    private func takePhoto() {
+        let settings = PhotoSettings(brightness: brightness, grain: grain, hue: hue, saturation: saturation,
+                                     vignetteColor: isVignetteOn ? vignetteColor : nil)
+        let message: String
+        if let frame = model.currentFrame(), let image = PhotoRenderer.render(frame, settings: settings) {
+            do {
+                let url = try PhotoRenderer.saveToPictures(image)
+                message = "> saved ~/Pictures/\(PhotoRenderer.folderName)/\(url.lastPathComponent)"
+            } catch {
+                message = "> couldn't save photo: \(error.localizedDescription)"
+            }
+        } else {
+            message = "> couldn't capture photo"
+        }
+        withAnimation { photoStatus = message }
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            // Only clear this message, not a newer one from a later photo.
+            if photoStatus == message {
+                withAnimation { photoStatus = nil }
+            }
+        }
     }
 
     /// Length of the horizontal vignette color slider: a fifth of the video's width.

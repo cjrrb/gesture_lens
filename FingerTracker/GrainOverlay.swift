@@ -9,15 +9,21 @@ import SwiftUI
 struct GrainOverlay: View {
     /// 0 (no grain) … 1 (maximum grain).
     let intensity: Double
+    /// When false, draws a single still grain frame (used when rendering photos).
+    var animated = true
 
     private static let frameRate = 24.0
     private static let frames: [Image] = (0..<6).compactMap { _ in makeNoiseImage(size: 256) }
 
     var body: some View {
         if intensity > 0, !Self.frames.isEmpty {
-            TimelineView(.periodic(from: .now, by: 1 / Self.frameRate)) { context in
-                let index = Int(context.date.timeIntervalSinceReferenceDate * Self.frameRate) % Self.frames.count
-                grain(Self.frames[index])
+            if animated {
+                TimelineView(.periodic(from: .now, by: 1 / Self.frameRate)) { context in
+                    let index = Int(context.date.timeIntervalSinceReferenceDate * Self.frameRate) % Self.frames.count
+                    grain(Self.frames[index])
+                }
+            } else {
+                grain(Self.frames[0])
             }
         }
     }

@@ -116,6 +116,11 @@ final class CameraModel {
         return result
     }
 
+    /// The most recent unprocessed camera frame (not mirrored), if the camera is running.
+    func currentFrame() -> CVPixelBuffer? {
+        processor?.latestPixelBuffer()
+    }
+
     func start() async {
         guard !isConfigured else { return }
 
@@ -167,6 +172,13 @@ nonisolated final class FrameProcessor: NSObject, AVCaptureVideoDataOutputSample
         return request
     }()
     private let faceRequest = VNDetectFaceRectanglesRequest()
+    /// The most recent camera frame, kept for taking photos. Written on the capture queue, read on the main actor.
+    private let latestBufferLock = NSLock()
+    private var latestBuffer: CVPixelBuffer?
+
+    func latestPixelBuffer() -> CVPixelBuffer? {
+        latestBufferLock.withLock { latestBuffer }
+    }
     private let onResults: @Sendable ([TrackedHand], [TrackedFace], CGSize) -> Void
 
     /// Every hand joint Vision reports, with the names used in `TrackedHand.joints`.
@@ -186,6 +198,7 @@ nonisolated final class FrameProcessor: NSObject, AVCaptureVideoDataOutputSample
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let size = CGSize(width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
+        latestBufferLock.withLock { latestBuffer = pixelBuffer }
 
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up)
         do {
