@@ -1,6 +1,6 @@
 //
 //  TrackingOverlay.swift
-//  FingerTracker
+//  gesture_lens
 //
 
 import SwiftUI

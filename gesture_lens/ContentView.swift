@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  FingerTracker
+//  gesture_lens
 //
 //  Created by Cort Reynolds-Bolan on 2026-10-08.
 //

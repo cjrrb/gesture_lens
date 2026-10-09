@@ -1,6 +1,6 @@
 //
 //  CameraPreview.swift
-//  FingerTracker
+//  gesture_lens
 //
 
 import AVFoundation

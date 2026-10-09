@@ -1,6 +1,6 @@
 //
 //  CameraModel.swift
-//  FingerTracker
+//  gesture_lens
 //
 
 import AVFoundation
@@ -149,7 +149,7 @@ final class CameraModel {
 
         let output = AVCaptureVideoDataOutput()
         output.alwaysDiscardsLateVideoFrames = true
-        output.setSampleBufferDelegate(processor, queue: DispatchQueue(label: "FingerTracker.video"))
+        output.setSampleBufferDelegate(processor, queue: DispatchQueue(label: "gesture_lens.video"))
 
         session.beginConfiguration()
         session.sessionPreset = .high

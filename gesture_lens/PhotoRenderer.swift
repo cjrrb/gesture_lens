@@ -1,6 +1,6 @@
 //
 //  PhotoRenderer.swift
-//  FingerTracker
+//  gesture_lens
 //
 
 import CoreImage
