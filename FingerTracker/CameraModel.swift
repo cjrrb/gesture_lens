@@ -33,11 +33,19 @@ struct TrackedHand: Identifiable {
     }
 }
 
+/// A detected face.
+struct TrackedFace: Identifiable {
+    let id: Int
+    /// Normalized bounding box (0–1) with a top-left origin, already mirrored to match the preview.
+    let bounds: CGRect
+}
+
 /// Owns the capture session and publishes the latest fingertip positions.
 @Observable
 final class CameraModel {
     let session = AVCaptureSession()
     private(set) var hands: [TrackedHand] = []
+    private(set) var faces: [TrackedFace] = []
     /// Pixel size of the camera frames, used to aspect-fit the overlay.
     private(set) var videoSize: CGSize = CGSize(width: 16, height: 9)
     private(set) var errorMessage: String?
@@ -47,6 +55,8 @@ final class CameraModel {
     @ObservationIgnored private var processor: FrameProcessor?
     /// Last smoothed position for each hand joint, keyed by "<hand id>-<joint name>".
     @ObservationIgnored private var smoothedLocations: [String: CGPoint] = [:]
+    /// Last smoothed bounding box for each face, keyed by `TrackedFace.id`.
+    @ObservationIgnored private var smoothedFaceBounds: [Int: CGRect] = [:]
 
     /// How much of each new reading to blend in (lower = steadier but laggier).
     private static let smoothingFactor: CGFloat = 0.3
@@ -77,6 +87,26 @@ final class CameraModel {
         return result
     }
 
+    /// Applies the same smoothing to face bounding boxes.
+    private func smoothed(_ faces: [TrackedFace]) -> [TrackedFace] {
+        var updated: [Int: CGRect] = [:]
+        let result = faces.map { face -> TrackedFace in
+            var bounds = face.bounds
+            if let previous = smoothedFaceBounds[face.id],
+               hypot(bounds.midX - previous.midX, bounds.midY - previous.midY) < Self.snapDistance {
+                let a = Self.smoothingFactor
+                bounds = CGRect(x: previous.minX + a * (bounds.minX - previous.minX),
+                                y: previous.minY + a * (bounds.minY - previous.minY),
+                                width: previous.width + a * (bounds.width - previous.width),
+                                height: previous.height + a * (bounds.height - previous.height))
+            }
+            updated[face.id] = bounds
+            return TrackedFace(id: face.id, bounds: bounds)
+        }
+        smoothedFaceBounds = updated
+        return result
+    }
+
     func start() async {
         guard !isConfigured else { return }
 
@@ -92,13 +122,14 @@ final class CameraModel {
         }
 
         // A main-actor closure is Sendable, so the capture queue can hop back to it safely.
-        let update: @MainActor ([TrackedHand], CGSize) -> Void = { [weak self] hands, size in
+        let update: @MainActor ([TrackedHand], [TrackedFace], CGSize) -> Void = { [weak self] hands, faces, size in
             guard let self else { return }
             self.hands = smoothed(hands)
+            self.faces = smoothed(faces)
             self.videoSize = size
         }
-        let processor = FrameProcessor { hands, size in
-            Task { @MainActor in update(hands, size) }
+        let processor = FrameProcessor { hands, faces, size in
+            Task { @MainActor in update(hands, faces, size) }
         }
         self.processor = processor
 
@@ -119,14 +150,15 @@ final class CameraModel {
     }
 }
 
-/// Runs hand pose detection on each camera frame (on the capture queue).
+/// Runs hand pose and face detection on each camera frame (on the capture queue).
 nonisolated final class FrameProcessor: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     private let request: VNDetectHumanHandPoseRequest = {
         let request = VNDetectHumanHandPoseRequest()
         request.maximumHandCount = 2
         return request
     }()
-    private let onResults: @Sendable ([TrackedHand], CGSize) -> Void
+    private let faceRequest = VNDetectFaceRectanglesRequest()
+    private let onResults: @Sendable ([TrackedHand], [TrackedFace], CGSize) -> Void
 
     /// The fingertip joints Vision reports, with the names used in `TrackedHand.joints`.
     private static let jointNames: [(VNHumanHandPoseObservation.JointName, String)] = [
@@ -134,7 +166,7 @@ nonisolated final class FrameProcessor: NSObject, AVCaptureVideoDataOutputSample
         (.ringTip, "ringTip"), (.littleTip, "littleTip")
     ]
 
-    init(onResults: @escaping @Sendable ([TrackedHand], CGSize) -> Void) {
+    init(onResults: @escaping @Sendable ([TrackedHand], [TrackedFace], CGSize) -> Void) {
         self.onResults = onResults
     }
 
@@ -144,7 +176,7 @@ nonisolated final class FrameProcessor: NSObject, AVCaptureVideoDataOutputSample
 
         let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .up)
         do {
-            try handler.perform([request])
+            try handler.perform([request, faceRequest])
         } catch {
             return
         }
@@ -159,6 +191,12 @@ nonisolated final class FrameProcessor: NSObject, AVCaptureVideoDataOutputSample
             }
             return TrackedHand(id: index, joints: joints)
         }
-        onResults(hands.filter { !$0.joints.isEmpty }, size)
+        let faces = (faceRequest.results ?? []).enumerated().map { index, observation in
+            // Same conversion as fingertips: flip y for SwiftUI, mirror x to match the preview.
+            let box = observation.boundingBox
+            let bounds = CGRect(x: 1 - box.maxX, y: 1 - box.maxY, width: box.width, height: box.height)
+            return TrackedFace(id: index, bounds: bounds)
+        }
+        onResults(hands.filter { !$0.joints.isEmpty }, faces, size)
     }
 }

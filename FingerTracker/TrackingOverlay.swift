@@ -5,14 +5,24 @@
 
 import SwiftUI
 
-/// Draws the tracked fingertips over the video.
+/// Draws the face boxes and tracked fingertips over the video.
 struct TrackingOverlay: View {
     let hands: [TrackedHand]
+    let faces: [TrackedFace]
     /// The video's rectangle in this view's coordinates; normalized positions are mapped into it.
     let rect: CGRect
 
     var body: some View {
         ZStack {
+            ForEach(faces) { face in
+                let box = viewRect(for: face)
+                Rectangle()
+                    .stroke(.white, lineWidth: 0.75)
+                    .frame(width: box.width, height: box.height)
+                    .position(x: box.midX, y: box.midY)
+                label(Self.formatted(CGPoint(x: face.bounds.midX, y: face.bounds.midY)))
+                    .position(x: box.midX, y: box.minY - 10)
+            }
             ForEach(hands) { hand in
                 fingertips(for: hand)
             }
@@ -49,6 +59,14 @@ struct TrackingOverlay: View {
     /// Converts a normalized location into a point within the video rectangle.
     private func viewPoint(for location: CGPoint) -> CGPoint {
         CGPoint(x: rect.minX + location.x * rect.width, y: rect.minY + location.y * rect.height)
+    }
+
+    /// Converts a face's normalized bounds into a rectangle within the video rectangle.
+    private func viewRect(for face: TrackedFace) -> CGRect {
+        CGRect(x: rect.minX + face.bounds.minX * rect.width,
+               y: rect.minY + face.bounds.minY * rect.height,
+               width: face.bounds.width * rect.width,
+               height: face.bounds.height * rect.height)
     }
 
     static func formatted(_ point: CGPoint) -> String {

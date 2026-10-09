@@ -45,10 +45,10 @@ struct ContentView: View {
         .task { await model.start() }
     }
 
-    /// Thin rings and coordinates over each tracked fingertip.
+    /// The face box and thin rings and coordinates over each tracked fingertip.
     private var fingerOverlay: some View {
         GeometryReader { geometry in
-            TrackingOverlay(hands: model.hands, rect: videoRect(in: geometry.size))
+            TrackingOverlay(hands: model.hands, faces: model.faces, rect: videoRect(in: geometry.size))
         }
         .allowsHitTesting(false)
     }
@@ -60,9 +60,25 @@ struct ContentView: View {
                 Text("finger_tracker")
                 Text(String(repeating: "─", count: 28))
                     .opacity(0.4)
-                if model.hands.isEmpty {
+                if model.faces.isEmpty && model.hands.isEmpty {
                     Text("> nothing detected_")
                         .opacity(0.6)
+                }
+                ForEach(model.faces) { face in
+                    Text("[face \(face.id + 1)]")
+                        .padding(.top, 8)
+                    HStack {
+                        Text("  center")
+                        Spacer()
+                        Text(formatted(CGPoint(x: face.bounds.midX, y: face.bounds.midY)))
+                            .opacity(0.7)
+                    }
+                    HStack {
+                        Text("  size")
+                        Spacer()
+                        Text(formatted(CGPoint(x: face.bounds.width, y: face.bounds.height)))
+                            .opacity(0.7)
+                    }
                 }
                 ForEach(model.hands) { hand in
                     Text("[hand \(hand.id + 1)]")
